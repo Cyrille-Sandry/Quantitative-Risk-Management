@@ -1,0 +1,370 @@
+---
+title: "Modelling and forecasting time series without trend and  seasonal component"
+author: "Cyrille Sandry Simeu"  
+date: '`r paste("December 2021", collapse=" ")`'  
+output:
+  pdf_document:
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+---
+ 
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE)
+```
+
+```{r library,include = FALSE, eval = TRUE}
+library(readr)
+library(tseries)
+library(DT)
+```
+
+# Introduction
+Our main concerns in this project are stationary time series without trend and without seasonal component.  We are interested on the analysis and the prediction of futures values of such time series.  In this project, we follows all the step needed for modelling and forecasting stationary time series. Basically, given an observed time series of length $n$, we are looking for an ARMA(p,q) model process which is more sparse/parsimonious, which correctly adjust the data and has the best prediction ability. We start with a visual analysis of the data. Based on the empirical values of the (partial) autocorrelation function $\gamma_X(h)$ and $\alpha_X(h)$, we choose which values of the parameters $p$ and $q$ should be considered in our analysis. Next, the automatic AIC selection criterion is used to select the best `AR(p)` models fitted using the function `arima()`. Another selected criterion like FPE and BIC are used here in order to check whether the later best fited model is recovered. In the validation step, we test whether our models are correctly adjusted  and we used a one-ahead prediction to predict the last 20% percent of the observed time series. This allows us to  compute the prediction error and to select the model with the best prediction ability. We predict the next 10 values of the series and construct the prediction together with the prediction interval.    
+
+
+# Preliminaries visual analysis
+
+## Loading data
+
+We use the R function `read.table()` to load the data with .txt format. The option `header=T` is add in order to add header of the data. We print the first 10 observations of the data and we plot the time series of observed data.
+
+```{r}
+# import data
+
+data<- read.table("Serie3.txt", header=T)
+# print the first 10 observations
+head(data, 10)
+dim(data)
+```
+
+
+```{r}
+# Generate a time series from the data
+data<-ts(data)
+# plot the time series
+plot(data)
+```
+
+This observed time series is a stationary time series in the sense that :
+
+* It mean value function does not depend on the time,
+
+* The covariances $Cov(X_t,X_{t+h})$ are finite and depend only on the lag $h$, i.e., $\gamma_X(h)=Cov(X_t,X_{t+h})<+\infty$ for all $t,h$. 
+
+
+## Autocorrelation function (ACF) and partial autocorrelation functions (PACF)
+
+Now we are going to analyse the empirical autocorrelation function ACF and the empirical partial autocorrelation function PACF in order to choose the model that fit first the data. For, let us first recall how ACF and PACF are determined.  
+
+-  The autocorrelation function of an observed time series $(X_t)_{t\in \mathbb{Z}}$ is defined by
+$$ \rho_X(h)=\frac{\gamma_X(h)}{\gamma_X(0)}   $$
+
+-  The partial autocorrelation $\alpha_X(h)$ of an observed time series $(X_t)_t$ is the correlation between the observation $X_t$ and $X_{t-h}$ adjusted by taking out the information coming from intermediate observations $X_{t-1},\dots,X_{t-h+1}$.
+
+
+In general, the ACF and PACF are used to select models to be fit such as  AR(p), MA(q) and ARMA(p,q). It also gives a first indication of the orders parameters $p$ and $q$.
+
+```{r}
+# plot together, the acf and the pcaf
+par(mfrow=c(1,2))
+acf(data, lag.max = 30, main="Empirical ACF of the process")
+pacf(data,lag.max = 30, main="Empirical PACF of the process")
+```
+
+
+A quick interpretation of the acf and pacf functions shows that, $\gamma_X(h)$ decay slowly to $0$ and $\alpha_X(h)=0$ for all $h>2$. This suggest an autoregressive model of order $2$, namely an $AR(2)$. A priori, we can only consider the autoregressive models since the ACF decay slowly to 0 and the PACF is zero for all $h>2$. So here $p=2$ and $q=0$.
+
+
+
+# Modelisation
+
+The aim of this step is to choose some models that fit the observed time series and to estimate their parameters. In the previous section, the ACF and PACF functions suggest an autoregressive model of order $2$.  We are now going to fit  AR(p) models using Yules-Walkers equations techniques with the function `ar.yw()` and to fit AR models using the Maximum Likelihood Estimation (MLE) or Least squares (LS) with the function `arima()`. The Akaike Information criterion (AIC) will be used as our automatic model selection Information Criterion. Another automatic selection criterion such as the Bayesian Information Criterion (BIC) and Finite Prediction Error (PPE) will be used to select another model useful in the comparison step or to check whether we obtain the same model. Here, we will use FPE for AR(q) model fitted with the function `ar.yw()`. 
+
+## Fitting  models 
+
+Based on the observation of the ACF and the PACF functions, an autoregressive `AR(p)` model must be used to fit the data with $p=2$. This suggests to fit `AR(1)` or `AR(2)` to the data. For, we are going to use two differents techniques: the first which fit autoregressive models by solving the Yules-Walker equations and the others which is based on an ARIMA(p,q) process.
+
+### AR model with ar.yw()
+
+We use the function `ar.yw()` to fit an autoregressive model AR to the data by solving the Yules-Walker equations.
+
+```{r}
+# Fit an AR model by solving the Yules-Walker equations
+YW <-ar.yw(data, aic=TRUE,order.max = 10)
+```
+
+
+### ARIMA(p,d,q) Models
+
+Based on the above automatic selection, $p=1,2$, $d=0$ and $q=0$ and we can fit `AR(p)`  models using ARIMA(p,d,q) as follows: 
+
+```{r}
+arima1 <- arima(data, order = c(1,0,0))
+arima2 <- arima(data, order = c(2,0,0))
+```
+
+Finally, we obtain the following three models: 
+
+- the autoregressive model `AR(2)`, that we denoted by `YW` and  where the coefficients are obtained using the Yules-Walkers equation,  
+- the  autoregressive model `AR(1)`, that we denoted by `arima1` and  where the coefficients are obtained by the `MLE` and  
+- the  autoregressive model `AR(2)`, that we  denoted by `arima2`  and where the coefficients are obtained by the `MLE`.
+
+## Automatic model selection
+
+In this part, the models are selected automatically using selected Information Criterion. For that, we will used the following functions:
+
+```{r }
+# The following  functions will be use for model selections criterions
+Fpe.ar <- function(serie, modele){
+  modele$var.pred * (length(serie) + modele$order) / (length(serie) - modele$order)
+} 
+
+Aic.ar <- function(serie, modele){
+  log(modele$var.pred) + 2 * modele$order / length(serie)
+}
+
+Bic.ar <- function(serie,modele){
+  log(modele$var.pred) + (modele$order) / length(serie) * log(length(serie))
+}
+```
+
+
+
+
+### Automatic selection criterion for model fitted by ar.yw()
+
+The above functions `Fpe.ar()`, `Aic.ar()` and `Bic.ar()` are used  to compute the automatic models selection criterions for the model fitted with ar.yw(). We set the maximum lag to 10 in order to find the few best parameters $p$.
+
+
+```{r}
+# Selection criterion for the model fited with ar.yw()
+
+Fpe <- Aic <- Bic <- numeric(10)
+for(i in 1:10){
+  Fpe[i] <- Fpe.ar(data, ar.yw(data, order.max = i, aic = F))
+  Aic[i] <- Aic.ar(data, ar.yw(data, order.max = i, aic = F))
+  Bic[i] <- Bic.ar(data, ar.yw(data, order.max = i, aic = F))
+}
+tabs<-data.frame(cbind(Fpe,Aic,Bic))
+tabs
+which.min(Fpe)
+which.min(Aic)
+which.min(Bic)
+```
+
+The Fpe and the Aic criterions for automatic models selection suggest an autoregressive process of order $2$, **AR(2)** and the Bic criterion suggests an autoregressive process of order $1$, **AR(1)**.
+
+
+
+### Automatic model selection criterions for ARIMA(p,d,q)
+
+The following selection criterion will allows us to choose the best fitted model.
+
+```{r}
+Aic.arima <- function(serie, modele){
+  log(modele$sigma2) + 2 * (length(modele$coef) - 1) / length(serie)
+}
+
+Bic.arima <- function(serie, modele){
+  log(modele$sigma2) + (length(modele$coef) - 1) * log(length(serie)) / length(serie)
+}
+
+Aic.arima(data,arima1)
+Bic.arima(data, arima1)
+
+
+Aic.arima(data,arima2)
+Bic.arima(data, arima2)
+
+```
+
+
+Based on the above values of the AIC criterion, we conclude that the best fitted model is the autoregressive model with parameter $p=2$, `AR(2)`. However, we keep the others model for further comparison.
+
+# Validation
+
+The validation step in time series analysis is very important. We are going to check whether the above three models fit the time series. We  will first used some inference statistical tests in order to test the significance of the individual coefficients in each choosing fitted model. Here 
+$$\text{H}_0 : \text{Coeff}_i=0, \qquad\text{H}_1 : \text{Coeff}_i \neq 0$$  
+
+After, we will use the function `tsdiag()` for the analysis of the residuals. Note that an alternative way of analysing residual of a stationary time series is to compute the ACF of the residuals or to make some QQ-plot of residuals with the `qqnorm()` and `qqline()` functions. We can also use the Lyung-Box test with the function `box.test()` which test whether the standardized residuals are different from the white noise.  
+
+## Significance of individual coefficients of the selected models
+
+### Significance of coefficients of the model fitted with  ar.yw().
+
+```{r}
+coef.p <- function (coeff.vect, var.vect){
+if (length(coeff.vect) != length(var.vect)) output = NaN                  
+else {
+	sigma.vect = sqrt(var.vect)
+	n = length(sigma.vect)
+	output <- sapply(1:n, function(i) 2*pnorm(abs(coeff.vect[i]) / sigma.vect[i], lower.tail = F))
+	}
+  output
+}
+
+```
+
+We test significance of individual coefficients with the function `coef.p()`
+
+```{r}
+# Validation of the model fitted with ar.yw()
+coef.p(YW$ar, diag(YW$asy.var.coef)) #AR(2)
+```
+
+Base on the above result, the hypothesis $\text{H}_0$ is accepted. 
+
+### Significance of coefficients of the AR(1) fitted with arima(1,0,0)
+
+We test the significance of the individual coefficients with the function `coef.p()`.
+
+```{r}
+# Validation AR(1)
+coef.p(arima1$coef[1], diag(arima1$var.coef)[1]) 
+```
+### Significance of coefficient of AR(2) fitted with arima(2,0,0)
+
+We test the significance of the individual coefficients:
+
+```{r}
+# Validation
+coef.p(arima2$coef, diag(arima2$var.coef)) #AR(2)
+```
+
+
+In all the above coefficients tests, the hypothesis $\text{H}_0$ are accepted since the p-values are  all least than $5\times 10^{-2}$. Next, we analyse residuals.
+
+## Residual analysis
+
+## Residual of AR(1) fitted with ARIMA(1,0,0)
+
+We analyse residuals with two methods:
+
+```{r}
+# analysis of residuals using the function tsdiag()
+tsdiag(arima1, gof.lag = floor(sqrt(length(data))))
+# analysing of residuals using qq-plot
+qqnorm(arima1$res); abline(0,1, col = 2)
+```
+
+
+## Residual of AR(2) fitted with ARIMA(2,0,0)
+
+
+```{r}
+# analysis of residuals using tsdiag()
+tsdiag(arima2, gof.lag = floor(sqrt(length(data)))) 
+# analysis of residuals using qqnorm()
+qqnorm(arima2$res); abline(0,1, col = 2)
+```
+
+
+The residuals analysis of the above models shows that residuals correspond to white noise. 
+
+## Prediction error
+
+Based on the sub-series of length ranging from 80% to 100% percent of the time series length, we make one-ahead predictions of each sub-series based on the fitted model. The idea is that, starting with the sub-series 
+$\{X_1,\dots,X_{\bar n-1} \}$, we use fitted model for the prediction of the value of $\hat X_{\bar n}$. We continue the process until the prediction of $\hat X_n$. More generally, for each $\bar n\leq j\leq n$, we used the subserie $\{ X_1,\dots, X_{j-1} \}$ and the fitted model to predict the value of $\hat X_j$. The total prediction error is then given by
+
+$$ error= \displaystyle\frac{1}{n- \bar n} \sum_{i=\bar n}^{n}(X_{i}-\hat X_{i})^{2}  $$
+where
+
+-	$n$ is the length of the time series,
+-	$\bar n=floor(0.8T)$,
+-	$\hat X_{i}$ is the predicted values of $X_i$, $i=\bar n,\dots,n$. 
+
+ 
+
+```{r OnAhead, echo=FALSE}
+#-------------------------------------------------------------------------------
+# OneAhead()
+## functions for time series course
+# November 7th, 2006
+# (c) Hilmar Boehm, Universite Catholique de Louvain, boehm@stat.ucl.ac.be
+# modified: Catherine Timmermans
+# December, 2006
+#--------------------------------------------------------------------------
+# compute one step prediction error for SARIMA time series
+# ts: time series, order: vector (p,d,q)
+# seasonal: list (order: vector (P,D,Q), period:numeric) 
+#--------------------------------------------------------------------------
+OneAhead <- function(ts1, order, seasonal = list(order = c(0,0,0), period = 0)){
+  n <- length(ts1)
+  n80 <- floor(0.8 * n)
+  n20 <- n - n80 
+  tmp <- numeric(n)
+  for(i in n80:n){
+    ts1.part <- ts1[1:(i-1)]
+    tmp.model <- arima(ts1.part, order = order, seasonal = seasonal)
+    tmp[i] <- predict(tmp.model, n.ahead = 1)$pred[1]
+  }
+  error <-  sum(((tmp - ts1)[n80:n])^2) / n20
+  tspred <- c(ts1[1:(n80 - 1)], tmp[n80:n])
+  return(list(tspred = tspred, error = error)) 
+}
+#-------------------------------------------------------------------------------
+################################################################################
+
+```
+
+### Prediction error when using AR(1) model
+
+Here is the  prediction error for the `AR(1)` model.
+```{r}
+# prediction error for AR(1)
+pred1 <- OneAhead(data, order = c(1,0,0))
+pred1$error
+```
+
+### Prediction error when using our choosing model AR(2)
+
+Here is the prediction error for our chosen model `AR(2)`.
+
+```{r}
+# prediction error for AR(2)
+pred2 <- OneAhead(data, order = c(2,0,0))
+pred2$error
+```
+
+As we can see from the above prediction errors,  the prediction error of the `AR(1)` model is less than the prediction error of the `AR(2)` model. This means that $AR(1)$ has the best prediction ability. This has sense because the `AR(1)` model  has been selected by the Bayesian Information Criterion (BIC) as the best model for the data. It is known that the BIC criterion is used when the objective of the analysis is to adjust a model to the data so, one conclude that the model which correctly adjust the data is `AR(1)`. Since our main objective is to predict non observed values, AIC must be used as model selection criterion. Hence, the most appropriate model for us  is `AR(2)`. 
+
+
+# Prediction based on the chosen model AR(2)
+
+We construct a 10-ahead predictions with the prediction interval based on the chosen fitted model `AR(2)`.
+
+```{r}
+### Predictions with chosen model (AR(2))
+par(mfrow = c(1, 1)) 
+Ahead_10 <- predict(arima2, n.ahead = 10)
+ts.plot(ts(tail(data, 50), start = 951, end = 1000), 
+        ts(c(tail(data, 1), Ahead_10$pred), start = 1000, end = 1010), 
+        col=1:2, xlab = "Time", ylab = "Serie3", main = "Prediction 10-ahead") 
+lines(Ahead_10$pred, type="p", col=2) 
+lines(ts(c(tail(data, 1), Ahead_10$pred+Ahead_10$se), start = 1000, end = 1010), lty="dashed", col=4) 
+lines(ts(c(tail(data, 1), Ahead_10$pred-Ahead_10$se), start = 1000, end = 1010), lty="dashed", col=4)
+```
+
+# Conclusion
+
+Our objective in this project was to analyse a stationary time series without trend and seasonality and to predict the next 10 values of the series. In our analysis, the AIC criterion suggests that the most appropriated model to our data is the autoregressive model $AR(2)$ and the BIC criterion suggests that the model with the best prediction ability is the autoregressive model `AR(1)`. This later has been confirmed when comparing the prediction errors of the two models. How objective being the prediction of futures observations, we used the `AR(2)` to perform the 10-head prediction of the series.  
+
+# References
+
+[[1] Time series analysis, UCLouvain lecture LSTAT2170.](https://uclouvain.be/cours-2021-lstat2170)  
+
+[[2] Brockwell, P., Davis, R. : Introduction to Time Series and Forecasting. 1996, Springer.](https://link.springer.com/book/10.1007/978-3-319-29854-2)  
+
+[[3] Francois Benhmad: Youtube Chanel](https://www.youtube.com/channel/UCfMJuFphnigDwAb5UzGd03w)
+
+
+
+
